@@ -7,6 +7,7 @@ import os
 import time
 
 
+
 def high_pass_filter(image, cutoff_frequency):
     """
     Apply a high-pass filter to the image using FFT.
@@ -134,7 +135,7 @@ lk_params = dict(winSize=(25, 25),  # Window size
 
 
 ############################ Algorithm ####################################
-
+sift = cv2.SIFT_create()
 # Step 3: Track the keypoint for every frame
 def track_keypoints(video_path):
     # Read video
@@ -155,8 +156,8 @@ def track_keypoints(video_path):
 
 
     old_frame = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
-    old_frame = low_pass_filter(old_frame, 30)
-    old_frame = cv2.normalize(old_frame, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+    #old_frame = low_pass_filter(old_frame, 30)
+    #old_frame = cv2.normalize(old_frame, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
 
 
@@ -176,17 +177,15 @@ def track_keypoints(video_path):
 
         # use fft and high pass filter
         
-        frame_gray = low_pass_filter(frame_gray, 30)
-        frame_gray = cv2.normalize(frame_gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        #frame_gray = low_pass_filter(frame_gray, 40)
+        #frame_gray = cv2.normalize(frame_gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         
         
         # Draw the rectangle on the image
         #cv2.imshow('High Pass Filtered Image', frame_gray)
-        
         flow = cv2.calcOpticalFlowFarneback(old_frame, frame_gray, None,
-                                        pyr_scale=0.5, levels=3, winsize=15,
+                                        pyr_scale=0.5, levels=3, winsize=25,
                                         iterations=3, poly_n=5, poly_sigma=1.2, flags=0)
-        
         features.append(flow_to_feature_vector(flow))
         
         mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
@@ -194,14 +193,14 @@ def track_keypoints(video_path):
         hsv[..., 0] = ang * 180 / np.pi / 2
         hsv[..., 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
         
-        #bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        """bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
         
-        """cv2.imshow('Optical Flow', bgr)
+        cv2.imshow('Optical Flow', bgr)
         
         k = cv2.waitKey(30) & 0xff
         if k == 27:
-            break"""
-            
+            break
+            """
         # Update the previous frame and previous points
         old_frame = frame_gray.copy()
         
@@ -249,5 +248,5 @@ for folder in os.listdir(os.path.dirname(__file__)):
 
 df = pd.DataFrame(data)
 # save as pickle
-df.to_pickle('features.pkl')                
+df.to_pickle('features_nolpass.pkl')                
 
