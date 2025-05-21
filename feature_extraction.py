@@ -108,32 +108,11 @@ def flow_to_feature_vector(flow, num_bins=8):
  
 
 
-# Params for corner detection
-feature_params = dict(maxCorners=20,  # We want only one feature
-                      qualityLevel=0.1,  # Quality threshold 
-                      minDistance=7,  # Max distance between corners, not important in this case because we only use 1 corner
-                      blockSize=7)
 
 
 
 
 
-
-############################ Parameters ####################################
-
-""" 
-winSize --> size of the search window at each pyramid level
-Smaller windows can more precisely track small, detailed features -->   slow or subtle movements and where fine detail tracking is crucial.
-Larger windows is better for larger displacements between frames ,  more robust to noise and small variations in pixel intensity --> require more computations
-"""
-
-# Parameters for Lucas-Kanade optical flow
-lk_params = dict(winSize=(25, 25),  # Window size
-                 maxLevel=2,  # Number of pyramid levels
-                 criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.03))
-
-
-############################ Algorithm ####################################
 sift = cv2.SIFT_create()
 def extract_hog_features(image, pixels_per_cell=(8, 8), cells_per_block=(2, 2), orientations=9):
     """
@@ -161,25 +140,13 @@ def track_keypoints(video_path):
     # Take first frame and find corners in it
     ret, old_frame = cap.read()
 
-    width = old_frame.shape[1]
-    height = old_frame.shape[0]
-
-    # Create a mask image for drawing purposes
-    mask = np.zeros_like(old_frame)
-
-    frame_count = 0
-    start_time = time.time()
-
-
+    ##fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID'
+    ##out = cv2.VideoWriter('output.mp4', fourcc, 20.0, (old_frame.shape[1], old_frame.shape[0]))
+    if not ret:
+        print("Error: Cannot read video file.")
+        return []
 
     old_frame = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
-    #old_frame = low_pass_filter(old_frame, 30)
-    #old_frame = cv2.normalize(old_frame, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-
-
-
-    # Harris Corner detection
-    #p0 = cv2.goodFeaturesToTrack(old_frame, mask=None, **feature_params)
     
     hsv = np.zeros((old_frame.shape[0], old_frame.shape[1], 3), dtype=np.uint8)
 
@@ -192,14 +159,7 @@ def track_keypoints(video_path):
 
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # use fft and high pass filter
         
-        #frame_gray = low_pass_filter(frame_gray, 40)
-        #frame_gray = cv2.normalize(frame_gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        
-        
-        # Draw the rectangle on the image
-        #cv2.imshow('High Pass Filtered Image', frame_gray)
         flow = cv2.calcOpticalFlowFarneback(old_frame, frame_gray, None,
                                         pyr_scale=0.5, levels=3, winsize=25,
                                         iterations=3, poly_n=5, poly_sigma=1.2, flags=0)
@@ -217,17 +177,18 @@ def track_keypoints(video_path):
         """bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
         
         cv2.imshow('Optical Flow', bgr)
-        
+        out.write(bgr)
+
         k = cv2.waitKey(30) & 0xff
         if k == 27:
-            break
-            """
+            break"""
+            
         # Update the previous frame and previous points
         old_frame = frame_gray.copy()
         
         
     
-    
+    #out.release()
     #cv2.destroyAllWindows()
     cap.release()
     return features
@@ -260,7 +221,7 @@ def process_video(args):
 if __name__ == "__main__":
     video_tasks = []
     for folder in os.listdir(os.path.dirname(__file__)):
-        if "." in folder:
+        if "." in folder or 'Makefile' in folder  :
             continue
         videos_path = os.path.join(os.path.dirname(__file__), folder)
         for video_path in os.listdir(videos_path):
