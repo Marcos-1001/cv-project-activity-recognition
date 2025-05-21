@@ -1,4 +1,3 @@
-
 # %% 
 import cv2 
 import numpy as np
@@ -136,6 +135,24 @@ lk_params = dict(winSize=(25, 25),  # Window size
 
 ############################ Algorithm ####################################
 sift = cv2.SIFT_create()
+def extract_hog_features(image, pixels_per_cell=(8, 8), cells_per_block=(2, 2), orientations=9):
+    """
+    Extract HOG (Histogram of Oriented Gradients) features from an image.
+    """
+    if len(image.shape) == 3:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    hog_features = hog(
+        image,
+        orientations=orientations,
+        pixels_per_cell=pixels_per_cell,
+        cells_per_block=cells_per_block,
+        block_norm='L2-Hys',
+        visualize=False,
+        feature_vector=True
+    )
+    return hog_features
+
+
 # Step 3: Track the keypoint for every frame
 def track_keypoints(video_path):
     # Read video
@@ -162,7 +179,7 @@ def track_keypoints(video_path):
 
 
     # Harris Corner detection
-    p0 = cv2.goodFeaturesToTrack(old_frame, mask=None, **feature_params)
+    #p0 = cv2.goodFeaturesToTrack(old_frame, mask=None, **feature_params)
     
     hsv = np.zeros((old_frame.shape[0], old_frame.shape[1], 3), dtype=np.uint8)
 
@@ -186,7 +203,11 @@ def track_keypoints(video_path):
         flow = cv2.calcOpticalFlowFarneback(old_frame, frame_gray, None,
                                         pyr_scale=0.5, levels=3, winsize=25,
                                         iterations=3, poly_n=5, poly_sigma=1.2, flags=0)
-        features.append(flow_to_feature_vector(flow))
+
+        hog_features = extract_hog_features(frame_gray)
+        feature_vector = np.hstack([flow_to_feature_vector(flow), hog_features])
+        features.append(feature_vector)
+
         
         mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
         
@@ -207,46 +228,56 @@ def track_keypoints(video_path):
         
     
     
-    cv2.destroyAllWindows()
+    #cv2.destroyAllWindows()
     cap.release()
     return features
 
 import pandas as pd
 from tqdm import tqdm
+from skimage.feature import hog
+from concurrent.futures import ProcessPoolExecutor, as_completed
 df= pd.DataFrame()
 
 
 # structure of the dataframe
 data = []
+                
+        
+def process_video(args):
+    folder, video_path = args
+    video_path_full = os.path.join(os.path.dirname(__file__), folder, video_path)
+    features = np.array(track_keypoints(video_path_full))
+    mean_vector = np.mean(features, axis=0)
+    std_vector = np.std(features, axis=0)
+    max_vector = np.max(features, axis=0)
+    min_vector = np.min(features, axis=0)
+    median_vector = np.median(features, axis=0)
+    feature_vector = np.concatenate((mean_vector, std_vector, max_vector, min_vector, median_vector))
+    return {'video_name': video_path_full, 'feature_vector': feature_vector, 'activity': folder}
 
-for folder in os.listdir(os.path.dirname(__file__)):
-    print(folder)
-    if "." in folder:
-        continue
-    else:
+
+
+if __name__ == "__main__":
+    video_tasks = []
+    for folder in os.listdir(os.path.dirname(__file__)):
+        if "." in folder:
+            continue
         videos_path = os.path.join(os.path.dirname(__file__), folder)
-        
-        for video_path in tqdm(os.listdir(videos_path)):
+        for video_path in os.listdir(videos_path):
             if video_path.endswith('.mp4') or video_path.endswith('.avi'):
-                #print(video_path)
-                video_path_full = os.path.join(os.path.dirname(__file__), folder, video_path)
-                features = np.array(track_keypoints(video_path_full))
-                
-                mean_vector = np.mean(features, axis=0)
-                std_vector = np.std(features, axis=0)
-                max_vector = np.max(features, axis=0)
-                min_vector = np.min(features, axis=0)
-                median_vector = np.median(features, axis=0)
-                # Concatenate all vectors
-                features = np.concatenate((mean_vector, std_vector, max_vector, min_vector, median_vector))
-                
-                            
-                
-                data.append({'video_name': video_path_full, 'feature_vector': features, 'activity': folder})
-                
-        
+                video_tasks.append((folder, video_path))
+    data = []
+    with ProcessPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(process_video, args) for args in video_tasks]
+        for future in tqdm(as_completed(futures), total=len(futures)):
+            try:
+                result = future.result()
+                data.append(result)
+            except Exception as e:
+                print(f"Error processing a video: {e}")
 
-df = pd.DataFrame(data)
-# save as pickle
-df.to_pickle('features_nolpass.pkl')                
+
+    df = pd.DataFrame(data)
+    # save as pickle
+    df.to_pickle('features_hog_hof.pkl')
 
